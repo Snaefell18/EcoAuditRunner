@@ -3,563 +3,588 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>ISO 14001 & 50001: Eco-Audit Runner</title>
+    <title>ESG: Final Audit Edition</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;700;900&display=swap');
+        body { margin: 0; overflow: hidden; background: #1a1a1a; font-family: 'Courier New', Courier, monospace; }
+        #canvas-container { width: 100vw; height: 100vh; display: block; }
 
-        body {
-            margin: 0;
-            padding: 0;
-            overflow: hidden;
-            background-color: #333;
-            font-family: 'Roboto', sans-serif;
-            touch-action: none; /* Verhindert Zoom/Scroll auf Mobile */
+        .paper-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; opacity: 0.08;
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+            z-index: 5;
         }
 
-        #game-container {
-            position: relative;
-            width: 100vw;
-            height: 100vh;
-            background: linear-gradient(to bottom, #4facfe 0%, #00f2fe 100%);
-            overflow: hidden;
-        }
-
-        canvas {
-            display: block;
-            width: 100%;
-            height: 100%;
-        }
-
-        /* UI Overlay Styles */
-        #ui-layer {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            pointer-events: none;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            text-align: center;
-        }
-
-        .hud {
-            position: absolute;
-            top: 20px;
-            left: 20px;
-            color: white;
-            font-size: 24px;
-            font-weight: bold;
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
-            pointer-events: none;
-            z-index: 10;
+        .comic-box {
+            background: #fff; border: 3px solid #000; box-shadow: 4px 4px 0px #000;
+            transition: transform 0.1s;
         }
         
-        .iso-badge {
-            position: absolute;
-            top: 20px;
-            right: 20px;
-            background: rgba(255, 255, 255, 0.9);
-            padding: 5px 15px;
-            border-radius: 20px;
-            color: #2e7d32;
-            font-weight: bold;
-            font-size: 14px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-            display: flex;
-            gap: 10px;
+        .hidden-force { display: none !important; }
+        
+        #iso-overlay { pointer-events: none; transition: opacity 0.5s; z-index: 50; }
+        .iso-bar-container {
+            width: 300px; height: 30px; border: 4px solid black; background: white;
+            position: relative; overflow: hidden; transform: skewX(-20deg);
+        }
+        .iso-bar-fill {
+            height: 100%; width: 0%; background: repeating-linear-gradient(45deg, #00ff00, #00ff00 10px, #00cc00 10px, #00cc00 20px);
+            transition: width 0.2s;
         }
 
-        #start-screen, #game-over-screen {
-            background: rgba(255, 255, 255, 0.95);
-            padding: 40px;
-            border-radius: 20px;
-            box-shadow: 0 10px 25px rgba(0,0,0,0.2);
-            pointer-events: auto;
-            max-width: 90%;
-            width: 320px;
-            transition: transform 0.3s ease;
+        body { cursor: crosshair; }
+        .shake { animation: shake 0.4s cubic-bezier(.36,.07,.19,.97) both; }
+        @keyframes shake { 
+            10%, 90% { transform: translate3d(-2px, -1px, 0); }
+            20%, 80% { transform: translate3d(3px, 1px, 0); }
+            30%, 50%, 70% { transform: translate3d(-5px, 2px, 0); }
+            40%, 60% { transform: translate3d(5px, -2px, 0); }
         }
 
-        h1 {
-            color: #2e7d32;
-            margin: 0 0 10px 0;
-            font-size: 32px;
-            text-transform: uppercase;
-        }
+        #bear-alert-box { animation: slideIn 0.5s ease-out; }
+        @keyframes slideIn { from { transform: translateX(120%) rotate(10deg); } to { transform: translateX(0) rotate(2deg); } }
+        
+        .title-text { text-shadow: 5px 5px 0px #000; -webkit-text-stroke: 2px black; }
+        
+        #boss-warning { animation: flashRed 0.5s infinite; }
+        @keyframes flashRed { 0%, 100% { opacity: 0; transform: scale(1); } 50% { opacity: 1; transform: scale(1.1); } }
 
-        h2 {
-            color: #555;
-            font-size: 18px;
-            margin: 0 0 20px 0;
+        /* Win Screen FX */
+        .confetti {
+            position: absolute; width: 10px; height: 10px; background-color: #f00;
+            animation: fall linear forwards;
         }
-
-        p {
-            color: #666;
-            margin-bottom: 25px;
-            line-height: 1.5;
-        }
-
-        button {
-            background: linear-gradient(45deg, #43a047, #66bb6a);
-            border: none;
-            padding: 15px 40px;
-            color: white;
-            font-size: 18px;
-            font-weight: bold;
-            border-radius: 50px;
-            cursor: pointer;
-            box-shadow: 0 4px 15px rgba(67, 160, 71, 0.4);
-            transition: transform 0.1s, box-shadow 0.1s;
-        }
-
-        button:active {
-            transform: scale(0.95);
-            box-shadow: 0 2px 10px rgba(67, 160, 71, 0.3);
-        }
-
-        .hidden {
-            display: none !important;
-        }
-
-        /* Schwebende Texteffekte */
-        .floating-text {
-            position: absolute;
-            color: #fff;
-            font-weight: bold;
-            pointer-events: none;
-            animation: floatUp 1s ease-out forwards;
-            text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
-        }
-
-        @keyframes floatUp {
-            0% { transform: translateY(0); opacity: 1; }
-            100% { transform: translateY(-50px); opacity: 0; }
-        }
-
+        @keyframes fall { to { transform: translateY(100vh) rotate(720deg); } }
     </style>
 </head>
 <body>
+    <div id="canvas-container"></div>
+    <div class="paper-overlay"></div>
 
-<div id="game-container">
-    <canvas id="gameCanvas"></canvas>
-    
-    <div class="hud">
-        KPI Score: <span id="score">0</span>
-    </div>
-
-    <div class="iso-badge">
-        <span>ISO 14001</span> | <span>ISO 50001</span>
-    </div>
-
-    <div id="ui-layer">
-        <!-- Start Screen -->
-        <div id="start-screen">
-            <h1>Eco-Audit</h1>
-            <h2>Mission: Nachhaltigkeit</h2>
-            <p>Navigiere die Eco-Drone durch die industrielle Verschwendung.<br><br>
-               Vermeide hohe Emissionen (Schornsteine) und spare Energie!</p>
-            <button onclick="startGame()">Audit Starten</button>
+    <!-- MAIN MENU -->
+    <div id="title-screen" class="absolute inset-0 flex flex-col items-center justify-center z-40 bg-black/70 backdrop-blur-sm">
+        <h1 class="title-text text-8xl font-black text-green-500 mb-2 italic transform -rotate-3 text-center">ESG<br><span class="text-white">ECO GUARDIAN</span></h1>
+        <div class="comic-box p-6 mt-8 transform rotate-2 hover:rotate-0 transition-transform cursor-pointer hover:bg-green-100" onclick="startGameSequence()">
+            <h2 class="text-4xl font-black uppercase tracking-widest text-black">MISSION STARTEN</h2>
         </div>
+        <p class="text-white mt-4 font-bold bg-black px-2">v5.0 Final Audit</p>
+    </div>
 
-        <!-- Game Over Screen -->
-        <div id="game-over-screen" class="hidden">
-            <h1 style="color: #c62828;">Audit Failed!</h1>
-            <h2>Nichtkonformität festgestellt</h2>
-            <p id="death-reason">Zu viel CO2 ausgestoßen.</p>
-            <p>Erreichter KPI Score: <b id="final-score">0</b></p>
-            <button onclick="resetGame()">Re-Zertifizierung</button>
+    <!-- HUD -->
+    <div id="hud" class="absolute top-0 left-0 w-full p-4 z-10 pointer-events-none hidden-force">
+        <div class="flex justify-between max-w-7xl mx-auto items-start">
+            <div class="comic-box p-3 bg-yellow-400 pointer-events-auto transform -rotate-2">
+                <div class="text-xs font-black uppercase tracking-wider">ISO-Score</div>
+                <div id="score" class="text-3xl font-black">0</div>
+                <div class="text-xs font-bold text-right text-gray-700">Ziel: 10.000</div>
+            </div>
+            <div class="comic-box p-2 bg-red-100 flex flex-col items-center w-32 transform rotate-1">
+                <div class="text-xs font-black mb-1">❤️ INTEGRITÄT</div>
+                <div class="w-full h-3 bg-white border-2 border-black relative">
+                    <div id="health-bar" class="h-full bg-red-600 w-full transition-all"></div>
+                </div>
+            </div>
         </div>
     </div>
-</div>
 
-<script>
-    // --- Konfiguration & Setup ---
-    const canvas = document.getElementById('gameCanvas');
-    const ctx = canvas.getContext('2d');
-    
-    let gameRunning = false;
-    let frames = 0;
-    let score = 0;
-    let speed = 2.5; // Scrollgeschwindigkeit
+    <!-- ISO UI -->
+    <div id="iso-overlay" class="absolute inset-0 flex flex-col items-center justify-center hidden-force">
+        <h2 class="text-4xl font-black text-white mb-4 drop-shadow-[0_4px_0_#000]" style="-webkit-text-stroke: 2px black;">ISO ZERTIFIZIERUNG</h2>
+        <div class="iso-bar-container">
+            <div id="iso-fill" class="iso-bar-fill"></div>
+        </div>
+        <div id="iso-status" class="mt-2 font-bold text-white bg-black px-2">Der Auditor prüft die Compliance...</div>
+    </div>
 
-    // Responsive Canvas
-    function resizeCanvas() {
-        canvas.width = window.innerWidth;
-        canvas.height = window.innerHeight;
-    }
-    window.addEventListener('resize', resizeCanvas);
-    resizeCanvas();
+    <!-- Boss Warning -->
+    <div id="boss-warning" class="absolute top-1/4 w-full text-center hidden-force pointer-events-none z-30">
+        <h1 class="text-7xl font-black text-red-600 tracking-widest drop-shadow-xl" style="-webkit-text-stroke: 3px black;">SMOG DÄMON!</h1>
+        <p class="text-white font-bold text-2xl bg-black inline-block px-4">VERNICHTE IHN!</p>
+    </div>
 
-    // --- Spiel-Klassen ---
+    <!-- Bear Alert -->
+    <div id="bear-alert" class="absolute top-24 right-4 z-20 hidden-force pointer-events-none">
+        <div id="bear-alert-box" class="comic-box bg-orange-500 text-white p-4 flex flex-col gap-2 transform rotate-2 w-64">
+            <div class="flex items-center gap-4">
+                <span class="text-5xl">🥋🐻</span>
+                <div>
+                    <h2 class="text-xl font-black uppercase leading-none">KUNG-FU BÄR!</h2>
+                    <p class="text-xs font-bold opacity-90">Die Natur schlägt zurück!</p>
+                </div>
+            </div>
+            <div class="w-full h-2 bg-orange-800 rounded-full overflow-hidden border border-black">
+                <div id="bear-timer-bar" class="h-full bg-white w-full origin-left"></div>
+            </div>
+        </div>
+    </div>
 
-    // Partikel-Effekt für den Antrieb
-    class Particle {
-        constructor(x, y) {
-            this.x = x;
-            this.y = y;
-            this.size = Math.random() * 5 + 2;
-            this.speedX = Math.random() * -2 - 1;
-            this.speedY = Math.random() * 2 - 1;
-            this.color = `hsl(${120 + Math.random() * 40}, 100%, 50%)`; // Grüntöne
-            this.life = 1.0;
+    <!-- Hint -->
+    <div id="shoot-hint" class="absolute bottom-8 left-1/2 transform -translate-x-1/2 z-10 pointer-events-none opacity-80 hidden-force">
+        <div class="text-white text-xl font-black" style="-webkit-text-stroke: 1px black;">KLICK / LEERTASTE = PLASMA-SÄGE</div>
+    </div>
+
+    <!-- Game Over / Win Menu -->
+    <div id="menu" class="absolute inset-0 flex items-center justify-center z-30 bg-black/80 backdrop-blur-sm hidden-force">
+        <div class="comic-box p-8 max-w-md text-center bg-white rotate-2 border-4">
+            <h1 id="menu-title" class="text-5xl font-black mb-2 text-red-600 leading-none">MISSION<br>GESCHEITERT</h1>
+            <div class="text-3xl font-black mb-8 bg-yellow-300 p-2 border-2 border-black">ISO-Score: <span id="final-score">0</span></div>
+            <button onclick="location.reload()" class="w-full bg-black text-white font-black text-2xl py-4 border-4 border-transparent hover:bg-green-600 hover:border-black transition-all">
+                NEUSTART
+            </button>
+        </div>
+    </div>
+
+    <script>
+        const config = { speed: 1.2, laneWidth: 4, colors: { sky: 0x87CEEB, ground: 0xffffff, road: 0x222222 } };
+        const state = {
+            phase: 'title', score: 0, health: 100, 
+            targetX: 0, frame: 0, 
+            bearActive: false, bearMaxTime: 600, bearTimer: 0, bearAction: 'run',
+            refuelProgress: 0, refuelTimer: 0,
+            introAngle: 0
+        };
+
+        const container = document.getElementById('canvas-container');
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(config.colors.sky);
+        scene.fog = new THREE.Fog(config.colors.sky, 40, 110);
+
+        const camera = new THREE.PerspectiveCamera(60, window.innerWidth/window.innerHeight, 0.1, 300);
+        camera.position.set(5, 2, 5); camera.lookAt(0, 1, 0);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        container.appendChild(renderer.domElement);
+
+        const sun = new THREE.DirectionalLight(0xffffff, 1.1);
+        sun.position.set(50, 80, -30); sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048);
+        scene.add(sun); scene.add(new THREE.AmbientLight(0xffffff, 0.8));
+
+        const toonMat = (col) => new THREE.MeshToonMaterial({ color: col, flatShading: true });
+        function addOutline(mesh, thick=0.04, color=0x000000) {
+            const mat = new THREE.MeshBasicMaterial({ color: color, side: THREE.BackSide });
+            const outline = new THREE.Mesh(mesh.geometry, mat);
+            outline.scale.multiplyScalar(1 + thick);
+            mesh.add(outline);
         }
-        update() {
-            this.x += this.speedX;
-            this.y += this.speedY;
-            this.life -= 0.05;
-        }
-        draw() {
-            ctx.fillStyle = this.color;
-            ctx.globalAlpha = Math.max(0, this.life);
-            ctx.beginPath();
-            ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.globalAlpha = 1.0;
-        }
-    }
 
-    // Die Eco-Drone (Spieler)
-    const bird = {
-        x: 50,
-        y: 150,
-        radius: 15,
-        velocity: 0,
-        gravity: 0.25,
-        jump: -5.5, // Sprungkraft
-        particles: [],
+        function createTextSprite(message, color) {
+            const canvas = document.createElement('canvas'); canvas.width = 512; canvas.height = 128;
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = color; ctx.fillRect(0,0,512,128);
+            ctx.strokeStyle = 'black'; ctx.lineWidth = 10; ctx.strokeRect(0,0,512,128);
+            ctx.fillStyle = 'white'; ctx.font = 'bold 60px Courier New'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+            ctx.strokeStyle = 'black'; ctx.lineWidth = 4; ctx.strokeText(message, 256, 64); ctx.fillText(message, 256, 64);
+            const mat = new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(canvas) });
+            const sprite = new THREE.Sprite(mat); sprite.scale.set(4, 1, 1);
+            return sprite;
+        }
 
-        draw: function() {
-            // Partikel aktualisieren und zeichnen
-            if (frames % 2 === 0) {
-                this.particles.push(new Particle(this.x - 10, this.y));
+        const playerGroup = new THREE.Group(); scene.add(playerGroup);
+        
+        // --- AGGRO SAW BLADE ---
+        function createAggroSawGeometry(radius, innerRadius, teeth) {
+            const shape = new THREE.Shape();
+            const angleStep = (Math.PI * 2) / teeth;
+            for (let i = 0; i < teeth; i++) {
+                const angle = i * angleStep;
+                const tipX = Math.cos(angle) * radius; const tipY = Math.sin(angle) * radius;
+                const valleyAngle = angle + (angleStep * 0.7); 
+                const valleyX = Math.cos(valleyAngle) * innerRadius; const valleyY = Math.sin(valleyAngle) * innerRadius;
+                if (i === 0) shape.moveTo(tipX, tipY); else shape.lineTo(tipX, tipY);
+                shape.lineTo(valleyX, valleyY);
             }
-            for (let i = 0; i < this.particles.length; i++) {
-                this.particles[i].update();
-                this.particles[i].draw();
-                if (this.particles[i].life <= 0) {
-                    this.particles.splice(i, 1);
-                    i--;
+            shape.closePath();
+            return new THREE.ExtrudeGeometry(shape, { depth: 0.2, bevelEnabled: false });
+        }
+
+        const kartMesh = new THREE.Group();
+        const body = new THREE.Mesh(new THREE.CylinderGeometry(1.0, 2.0, 4.0, 4, 1, false, Math.PI*0.25), toonMat(0x1a1a1a)); 
+        body.rotation.x = Math.PI/2; body.rotation.y = Math.PI/4; body.scale.set(1.2, 0.6, 1); body.position.y = 0.7; addOutline(body, 0.05, 0xff0000); kartMesh.add(body);
+        const glass = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.4, 1.0), toonMat(0xff3d00)); glass.position.set(0, 1.3, -0.5); addOutline(glass); kartMesh.add(glass);
+
+        const sawGeo = createAggroSawGeometry(1.3, 0.7, 12); const sawMat = toonMat(0xcccccc);
+        const fSaw = new THREE.Mesh(sawGeo, sawMat); fSaw.position.set(0, 0.6, -2.2); addOutline(fSaw, 0.05, 0x550000); fSaw.userData = { isSaw: true, dir: 1, speed: 0.8 }; kartMesh.add(fSaw);
+        [1, -1].forEach(dir => { const saw = new THREE.Mesh(sawGeo, sawMat); saw.rotation.y = dir * 0.5; saw.position.set(1.6*dir, 0.6, -0.5); addOutline(saw, 0.05, 0x550000); saw.userData = { isSaw: true, dir: -dir, speed: 0.5 }; kartMesh.add(saw); });
+
+        const jet = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.8, 1.5, 8), toonMat(0x333333)); jet.rotation.x = Math.PI/2; jet.position.set(0, 1.0, 2.0); addOutline(jet); kartMesh.add(jet);
+        [[-0.8, 1.5], [0.8, 1.5]].forEach(pos => { const p = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 1.5), toonMat(0x555555)); p.rotation.x = 0.4; p.position.set(pos[0], 1.2, pos[1]); addOutline(p); kartMesh.add(p); });
+        const spoil = new THREE.Mesh(new THREE.BoxGeometry(2.5, 0.1, 0.8), toonMat(0xaa0000)); spoil.position.set(0, 1.8, 1.8); addOutline(spoil); kartMesh.add(spoil);
+        playerGroup.add(kartMesh);
+
+        // AUDITOR
+        const auditorGroup = new THREE.Group();
+        const audBody = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.5, 1.6), toonMat(0xffffff)); audBody.position.y = 0.8; addOutline(audBody); auditorGroup.add(audBody);
+        const audHead = new THREE.Mesh(new THREE.SphereGeometry(0.35), toonMat(0xffccaa)); audHead.position.y = 1.8; addOutline(audHead); auditorGroup.add(audHead);
+        const glasses = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.1, 0.3), new THREE.MeshBasicMaterial({color: 0x000000})); glasses.position.set(0, 1.8, 0.3); auditorGroup.add(glasses);
+        const board = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.6, 0.05), toonMat(0x8d6e63)); board.position.set(0.4, 1.0, 0.4); board.rotation.x = -0.5; board.rotation.z = 0.2; auditorGroup.add(board);
+        auditorGroup.visible = false; scene.add(auditorGroup);
+
+        // KUNG FU BEAR
+        const bearGroup = new THREE.Group();
+        const bTorso = new THREE.Mesh(new THREE.BoxGeometry(1.4, 1.6, 1), toonMat(0x5d4037)); bTorso.position.y = 1.6; addOutline(bTorso); bearGroup.add(bTorso);
+        const bHeadG = new THREE.Group(); bHeadG.position.set(0, 2.4, 0);
+        const bHead = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), toonMat(0x5d4037)); addOutline(bHead); bHeadG.add(bHead);
+        const bSnout = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.4, 0.4), toonMat(0x8d6e63)); bSnout.position.set(0, -0.1, -0.6); addOutline(bSnout); bHeadG.add(bSnout);
+        const bEarL = new THREE.Mesh(new THREE.SphereGeometry(0.25), toonMat(0x3e2723)); bEarL.position.set(-0.4, 0.5, -0.1); bHeadG.add(bEarL);
+        const bEarR = bEarL.clone(); bEarR.position.set(0.4, 0.5, -0.1); bHeadG.add(bEarR);
+        const bBand = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.15, 1.1), toonMat(0xff0000)); bBand.position.y = 0.2; bHeadG.add(bBand);
+        const bTails = new THREE.Group(); const bt1 = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.4, 0.05), toonMat(0xff0000)); bt1.position.set(0, -0.3, 0.6); bt1.rotation.x = 0.5; bTails.add(bt1); bTails.position.set(0, 0.2, 0.5); bHeadG.add(bTails); bearGroup.add(bHeadG);
+        const bLimbGeo = new THREE.BoxGeometry(0.4, 1, 0.4);
+        const bLegL = new THREE.Mesh(bLimbGeo, toonMat(0x5d4037)); bLegL.position.set(-0.4, 0.5, 0); addOutline(bLegL);
+        const bLegR = bLegL.clone(); bLegR.position.set(0.4, 0.5, 0); 
+        const bArmL = bLegL.clone(); bArmL.position.set(-0.8, 2, 0); const bArmR = bLegL.clone(); bArmR.position.set(0.8, 2, 0);
+        bearGroup.add(bLegL, bLegR, bArmL, bArmR); bearGroup.visible = false;
+        bearGroup.userData = { head: bHeadG, legL: bLegL, legR: bLegR, armL: bArmL, armR: bArmR, tails: bTails };
+        scene.add(bearGroup);
+
+        const envGroup = new THREE.Group(); scene.add(envGroup);
+        const ground = new THREE.Mesh(new THREE.PlaneGeometry(300, 500), toonMat(0xffffff)); ground.rotation.x = -Math.PI/2; ground.position.z = -150; envGroup.add(ground);
+        const road = new THREE.Mesh(new THREE.PlaneGeometry(18, 500), toonMat(config.colors.road)); road.rotation.x = -Math.PI/2; road.position.y = 0.05; road.position.z = -150; envGroup.add(road);
+
+        const envObjects = []; const obstacles = []; const projectiles = []; const particles = []; const isoOrbs = [];
+
+        // --- NEW OBSTACLES ---
+        function createBoss() {
+            const g = new THREE.Group();
+            const body = new THREE.Mesh(new THREE.BoxGeometry(2.5, 2, 4), toonMat(0x333333)); body.position.y = 1.5; addOutline(body, 0.05, 0xff0000); g.add(body);
+            const tank = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, 3, 16), new THREE.MeshBasicMaterial({color: 0x00ff00})); tank.rotation.z = Math.PI/2; tank.position.y = 3; g.add(tank);
+            const blade = new THREE.Mesh(new THREE.CylinderGeometry(1.5, 1.5, 3, 8), toonMat(0x555555)); blade.rotation.z = Math.PI/2; blade.position.set(0, 1, 2.5); g.add(blade);
+            return g;
+        }
+
+        // --- ANIMALS & ENVIRONMENT ---
+        function createDeer() {
+            const g = new THREE.Group();
+            const body = new THREE.Mesh(new THREE.BoxGeometry(1, 0.8, 1.5), toonMat(0x8d6e63)); body.position.y = 1; g.add(body);
+            const head = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.6, 0.8), toonMat(0x8d6e63)); head.position.set(0, 1.8, -0.8); g.add(head);
+            const a1 = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.8), toonMat(0x3e2723)); a1.position.set(-0.2, 2.2, -0.8); a1.rotation.z = 0.3; g.add(a1);
+            const a2 = a1.clone(); a2.position.set(0.2, 2.2, -0.8); a2.rotation.z = -0.3; g.add(a2);
+            const lGeo = new THREE.BoxGeometry(0.2, 1, 0.2);
+            [[-0.3, -0.5], [0.3, -0.5], [-0.3, 0.5], [0.3, 0.5]].forEach(pos => { const l = new THREE.Mesh(lGeo, toonMat(0x5d4037)); l.position.set(pos[0], 0.5, pos[1]); g.add(l); });
+            return g;
+        }
+
+        function createWolf() {
+            const g = new THREE.Group();
+            const body = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.6, 1.4), toonMat(0x757575)); body.position.y = 0.6; g.add(body);
+            const head = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 0.7), toonMat(0x757575)); head.position.set(0, 1.0, -0.8); g.add(head);
+            const e1 = new THREE.Mesh(new THREE.ConeGeometry(0.1, 0.3, 4), toonMat(0x424242)); e1.position.set(-0.2, 1.3, -0.8); g.add(e1);
+            const e2 = e1.clone(); e2.position.set(0.2, 1.3, -0.8); g.add(e2);
+            return g;
+        }
+
+        function createMountain(x, z) {
+            const mountain = new THREE.Mesh(new THREE.ConeGeometry(15, 30, 4), toonMat(0x607d8b)); mountain.position.set(x, 13, z);
+            const snow = new THREE.Mesh(new THREE.ConeGeometry(6, 12, 4), toonMat(0xffffff)); snow.position.y = 10; mountain.add(snow);
+            addOutline(mountain, 0.02, 0x263238); envGroup.add(mountain); envObjects.push(mountain);
+        }
+
+        function createDenseTree(x, z) {
+            const tree = new THREE.Group();
+            const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.5, 2), toonMat(0x3e2723)); trunk.position.y = 1; tree.add(trunk);
+            const lMat = toonMat(0x1b5e20); const snowMat = toonMat(0xe0f7fa);
+            for(let i=0; i<3; i++) {
+                const s = 1.5 - i*0.4;
+                const cone = new THREE.Mesh(new THREE.ConeGeometry(s, 2, 6), lMat); cone.position.y = 2 + i*1.2; addOutline(cone, 0.03);
+                if(Math.random() > 0.3) { const sn = new THREE.Mesh(new THREE.ConeGeometry(s*0.8, 0.5, 6), snowMat); sn.position.y = 0.5; cone.add(sn); }
+                tree.add(cone);
+            }
+            tree.position.set(x, 0, z); envGroup.add(tree); envObjects.push(tree);
+        }
+
+        function spawnEnvironmentRow(z) {
+             if(Math.random() < 0.2) createMountain(50 + Math.random()*30, z);
+             if(Math.random() < 0.2) createMountain(-50 - Math.random()*30, z);
+             for(let i=0; i<6; i++) { createDenseTree(12 + Math.random()*25, z + Math.random()*15); createDenseTree(-12 - Math.random()*25, z + Math.random()*15); }
+             if(Math.random() < 0.4) {
+                 const count = 1 + Math.floor(Math.random()*3);
+                 const side = Math.random() > 0.5 ? 1 : -1;
+                 const type = Math.random() > 0.6 ? 'deer' : 'wolf';
+                 for(let k=0; k<count; k++) {
+                     const anim = type === 'deer' ? createDeer() : createWolf();
+                     anim.position.set(side * (16 + k*2 + Math.random()*5), 0, z + k*2);
+                     anim.lookAt(0, 0, z-10); envGroup.add(anim); envObjects.push(anim);
+                 }
+             }
+        }
+        for(let z=-150; z<50; z+=20) spawnEnvironmentRow(z);
+
+        // --- NEW OBSTACLE SPAWNING LOGIC ---
+        function spawnObstacle() {
+             const lanes = [-4.5, -1.5, 1.5, 4.5]; const x = lanes[Math.floor(Math.random()*lanes.length)]; const z = -120;
+             let mesh; let type = 'bad';
+             
+             const r = Math.random();
+             
+             if(r < 0.05) { // Boss 5%
+                 mesh = createBoss(); type = 'boss'; mesh.userData = { hp: 5 };
+                 const warning = document.getElementById('boss-warning');
+                 warning.classList.remove('hidden-force'); setTimeout(() => warning.classList.add('hidden-force'), 2500);
+             }
+             else if(r < 0.25) { // Acid Pool (New)
+                 mesh = new THREE.Mesh(new THREE.CylinderGeometry(1.5, 1.5, 0.1, 12), new THREE.MeshBasicMaterial({color: 0x00ff00, opacity:0.8, transparent:true}));
+                 mesh.position.y = 0.1;
+                 type = 'bad';
+             }
+             else if(r < 0.45) { // Buzz Saw (New)
+                 mesh = new THREE.Group();
+                 const blade = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, 0.1, 16), toonMat(0x7f8c8d));
+                 blade.rotation.x = Math.PI/2; blade.position.y = 1; addOutline(blade);
+                 const stand = new THREE.Mesh(new THREE.BoxGeometry(0.2, 1, 0.2), toonMat(0x333333)); stand.position.y = 0.5;
+                 mesh.add(blade, stand);
+                 type = 'bad';
+             }
+             else if(r < 0.65) { // Trash Pile (New)
+                 mesh = new THREE.Group();
+                 for(let i=0; i<5; i++){
+                     const trash = new THREE.Mesh(new THREE.DodecahedronGeometry(0.4), new THREE.MeshToonMaterial({color: Math.random()*0xffffff}));
+                     trash.position.set((Math.random()-0.5), 0.4+Math.random()*0.5, (Math.random()-0.5));
+                     mesh.add(trash);
+                 }
+                 type = 'bad';
+             }
+             else if(r < 0.80) { // Toxic Drum
+                 mesh = new THREE.Group();
+                 const drum = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 1.2, 2.5, 12), toonMat(0x76ff03)); drum.position.y = 1.25; addOutline(drum);
+                 const rim = new THREE.Mesh(new THREE.TorusGeometry(1.2, 0.1, 8, 16), toonMat(0x000000)); rim.rotation.x = Math.PI/2; rim.position.y = 2.5;
+                 mesh.add(drum, rim); type='bad'; 
+             }
+             else if(r > 0.97) { // HONEY (Rare 3%)
+                 mesh = new THREE.Group();
+                 const glass = new THREE.Mesh(new THREE.CylinderGeometry(0.8, 0.9, 1.4, 12), new THREE.MeshToonMaterial({color: 0xffb300, transparent:true, opacity: 0.9})); glass.position.y = 0.7; addOutline(glass, 0.05, 0xffeb3b);
+                 const lid = new THREE.Mesh(new THREE.CylinderGeometry(0.9, 0.9, 0.2, 12), toonMat(0xeeeeee)); lid.position.y = 1.5; addOutline(lid);
+                 const label = new THREE.Mesh(new THREE.PlaneGeometry(0.8, 0.5), new THREE.MeshBasicMaterial({color: 0xffffff})); label.position.set(0, 0.7, 0.91);
+                 mesh.add(glass, lid, label); type = 'honey';
+             }
+             else { // Tire Stack fallback
+                 mesh = new THREE.Group();
+                 const tire = new THREE.Mesh(new THREE.TorusGeometry(0.8, 0.4, 8, 16), toonMat(0x212121)); tire.position.y = 0.5; tire.rotation.x = Math.PI/2; addOutline(tire);
+                 const box = new THREE.Mesh(new THREE.BoxGeometry(1.5, 1.5, 1.5), toonMat(0x4e342e)); box.position.set(0.5, 1.0, 0); addOutline(box);
+                 mesh.add(tire, box); type='bad'; 
+             }
+             
+             mesh.position.set(x, 0, z); mesh.userData = { type: type };
+             if(type==='boss') mesh.userData.hp = 5;
+             scene.add(mesh); obstacles.push(mesh);
+        }
+
+        // --- GAME LOGIC ---
+        function startGameSequence() {
+            if(state.phase === 'title') { state.phase = 'intro'; state.introAngle = 0; document.getElementById('title-screen').classList.add('hidden-force'); }
+        }
+
+        function updateIntro() {
+            state.introAngle += 0.02;
+            const radius = 9;
+            camera.position.x = Math.sin(state.introAngle) * radius;
+            camera.position.z = Math.cos(state.introAngle) * radius;
+            camera.position.y = 3 + Math.sin(state.introAngle*2)*1; 
+            camera.lookAt(0, 1, 0);
+            kartMesh.children.forEach(c => { if(c.userData.isSaw) c.rotation.z -= 0.1; });
+            if(state.introAngle > 6.3) startRefuelSequence();
+        }
+
+        function startRefuelSequence() {
+            state.phase = 'refuel'; state.refuelTimer = 0;
+            camera.position.set(4, 2, 4); camera.lookAt(0, 1, 0);
+            document.getElementById('iso-overlay').classList.remove('hidden-force');
+            document.getElementById('iso-overlay').style.display = 'flex';
+            auditorGroup.visible = true; auditorGroup.position.set(5, 0, 2); auditorGroup.rotation.y = -Math.PI/2;
+        }
+
+        function updateRefuel() {
+            state.refuelTimer++;
+            if(state.refuelTimer < 100) { auditorGroup.position.x -= 0.03; auditorGroup.position.y = Math.abs(Math.sin(state.refuelTimer * 0.2)) * 0.1; } 
+            else if(state.refuelTimer === 120) spawnISOOrb('ISO 14001', 0x4caf50, -6);
+            else if(state.refuelTimer === 250) spawnISOOrb('ISO 50001', 0x2196f3, 6);
+            else if(state.refuelTimer > 400) {
+                auditorGroup.rotation.y = Math.PI/2; auditorGroup.position.x += 0.05;
+                auditorGroup.position.y = Math.abs(Math.sin(state.refuelTimer * 0.2)) * 0.1;
+                document.getElementById('iso-status').innerText = "ZERTIFIZIERUNG ABGESCHLOSSEN!"; document.getElementById('iso-status').style.color = "#00ff00";
+            }
+            if(state.refuelTimer > 500) startGame();
+            isoOrbs.forEach(o => {
+                if(!o.active) return;
+                o.mesh.position.lerp(o.target, o.speed); o.mesh.rotation.z += 0.2;
+                if(o.mesh.position.distanceTo(o.target) < 0.5) {
+                    o.active = false; scene.remove(o.mesh); createEnhancedExplosion(0, 1, 0, o.color, 1.5); state.refuelProgress += 50; document.getElementById('iso-fill').style.width = state.refuelProgress + '%';
                 }
-            }
-
-            // Zeichne Drone (Glühender Ball)
-            ctx.shadowBlur = 20;
-            ctx.shadowColor = "#00ff00"; // Energie-Glow
-            ctx.fillStyle = '#fff';
-            ctx.beginPath();
-            ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
-            ctx.fill();
-            
-            // Innerer grüner Kern
-            ctx.fillStyle = '#76ff03';
-            ctx.beginPath();
-            ctx.arc(this.x, this.y, this.radius * 0.6, 0, Math.PI * 2);
-            ctx.fill();
-
-            // Recycling Symbol (Simuliert)
-            ctx.strokeStyle = '#2e7d32';
-            ctx.lineWidth = 2;
-            ctx.beginPath();
-            ctx.arc(this.x, this.y, this.radius * 0.4, 0, Math.PI * 1.5);
-            ctx.stroke();
-
-            ctx.shadowBlur = 0; // Reset Glow
-        },
-
-        update: function() {
-            this.velocity += this.gravity;
-            this.y += this.velocity;
-
-            // Bodenkollision
-            if (this.y + this.radius >= canvas.height - foreground.height) {
-                gameOver("Bodenkontamination verursacht!");
-            }
-            // Deckenkollision
-            if (this.y - this.radius <= 0) {
-                this.velocity = 0;
-                this.y = this.radius;
-            }
-        },
-
-        flap: function() {
-            this.velocity = this.jump;
+            });
+            updateParticles();
         }
-    };
 
-    // Hindernisse (Schornsteine)
-    const pipes = {
-        items: [],
-        width: 60,
-        gap: 160, // Platz zwischen oben und unten
-        dx: 3, // Bewegungsgeschwindigkeit
+        function spawnISOOrb(text, colorHex, startX) {
+            const group = new THREE.Group();
+            const orb = new THREE.Mesh(new THREE.IcosahedronGeometry(0.8, 1), new THREE.MeshBasicMaterial({ color: colorHex }));
+            addOutline(orb, 0.1, 0xffffff); group.add(orb);
+            const sprite = createTextSprite(text, '#' + colorHex.toString(16));
+            sprite.position.y = 1.5; group.add(sprite);
+            group.position.set(startX, 3, 2); scene.add(group);
+            isoOrbs.push({ mesh: group, target: new THREE.Vector3(0, 0.5, 0), color: colorHex, active: true, speed: 0.05 }); 
+        }
 
-        draw: function() {
-            for (let i = 0; i < this.items.length; i++) {
-                let p = this.items[i];
-                
-                // Verlauf für metallischen Look
-                let gradient = ctx.createLinearGradient(p.x, 0, p.x + this.width, 0);
-                gradient.addColorStop(0, '#555');
-                gradient.addColorStop(0.5, '#999');
-                gradient.addColorStop(1, '#444');
+        function startGame() {
+            state.phase = 'running';
+            auditorGroup.visible = false;
+            document.getElementById('iso-overlay').style.display = 'none'; document.getElementById('iso-overlay').classList.add('hidden-force');
+            document.getElementById('hud').classList.remove('hidden-force'); document.getElementById('shoot-hint').classList.remove('hidden-force');
+            state.score = 0; state.health = 100; state.refuelProgress = 0; document.getElementById('iso-fill').style.width = '0%';
+        }
 
-                ctx.fillStyle = gradient;
-                
-                // Oberer Schornstein
-                ctx.fillRect(p.x, 0, this.width, p.top);
-                // Unterer Schornstein
-                ctx.fillRect(p.x, canvas.height - foreground.height - p.bottom, this.width, p.bottom);
-                
-                // Details (Ränder)
-                ctx.fillStyle = '#222';
-                ctx.fillRect(p.x - 5, p.top - 20, this.width + 10, 20); // Top Cap
-                ctx.fillRect(p.x - 5, canvas.height - foreground.height - p.bottom, this.width + 10, 20); // Bottom Cap
-                
-                // Warnstreifen (ISO Sicherheit)
-                ctx.fillStyle = '#fdd835'; // Gelb
-                ctx.fillRect(p.x, p.top - 15, this.width, 5);
-                ctx.fillRect(p.x, canvas.height - foreground.height - p.bottom + 10, this.width, 5);
+        function shoot() {
+            if(state.phase !== 'running') return;
+            const p = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.3, 1), new THREE.MeshBasicMaterial({color: 0x00ffff}));
+            p.position.copy(playerGroup.position); p.position.y = 1; p.position.z -= 3;
+            scene.add(p); projectiles.push(p); kartMesh.position.z = 0.5;
+            createEnhancedExplosion(p.position.x, 1, p.position.z, 0x00ffff, 2); 
+        }
+
+        function createEnhancedExplosion(x, y, z, col, scale=1) {
+            const flash = new THREE.Mesh(new THREE.SphereGeometry(1.5 * scale), new THREE.MeshBasicMaterial({color: 0xffffff, transparent: true, opacity: 0.8}));
+            flash.position.set(x, y, z); flash.userData = { life: 0.1, isFlash: true }; scene.add(flash); particles.push(flash);
+            const ring = new THREE.Mesh(new THREE.TorusGeometry(0.1, 0.2, 4, 16), new THREE.MeshBasicMaterial({color: col, transparent: true, opacity: 0.8}));
+            ring.position.set(x, y, z); ring.rotation.x = Math.PI/2; ring.userData = { life: 0.5, isShockwave: true, expand: 1.5 }; scene.add(ring); particles.push(ring);
+            for(let i=0; i<15*scale; i++) {
+                const p = new THREE.Mesh(new THREE.BoxGeometry(0.2*scale, 0.2*scale, 0.2*scale), new THREE.MeshToonMaterial({color: col}));
+                p.position.set(x, y, z); p.rotation.set(Math.random(), Math.random(), Math.random());
+                p.userData = { vel: new THREE.Vector3((Math.random()-.5)*2, Math.random()*2, (Math.random()-.5)*2), life: 1, rot: new THREE.Vector3(Math.random()*0.2, Math.random()*0.2, 0) };
+                scene.add(p); particles.push(p);
             }
-        },
+        }
+        
+        function createMassiveFire() {
+            const f1 = new THREE.Mesh(new THREE.DodecahedronGeometry(0.6), new THREE.MeshBasicMaterial({color: 0xff5722, transparent:true}));
+            f1.position.set(playerGroup.position.x, 1.8, playerGroup.position.z + 2.5); f1.userData = { vel: new THREE.Vector3(0, 0.2, 0.6), life: 0.5 }; scene.add(f1); particles.push(f1);
+            [[-0.8, 1.8], [0.8, 1.8]].forEach(pos => {
+                const f = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.4, 0.4), new THREE.MeshBasicMaterial({color: 0xffa000, transparent:true}));
+                f.position.set(playerGroup.position.x + pos[0], 1.8, playerGroup.position.z + pos[1]); f.userData = { vel: new THREE.Vector3(0, 0.3, 0.4), life: 0.4 }; scene.add(f); particles.push(f);
+            });
+        }
 
-        update: function() {
-            // Neue Rohre hinzufügen
-            if (frames % 120 === 0) {
-                // Berechne zufällige Höhe
-                let maxY = canvas.height - foreground.height - this.gap - 50;
-                let topHeight = Math.floor(Math.random() * (maxY - 50)) + 50;
-                let bottomHeight = canvas.height - foreground.height - this.gap - topHeight;
-                
-                this.items.push({
-                    x: canvas.width,
-                    top: topHeight,
-                    bottom: bottomHeight,
-                    passed: false
-                });
+        function spawnConfetti() {
+            for(let i=0; i<5; i++) {
+                const c = document.createElement('div');
+                c.classList.add('confetti');
+                c.style.left = Math.random() * 100 + 'vw';
+                c.style.backgroundColor = `hsl(${Math.random()*360}, 100%, 50%)`;
+                c.style.animationDuration = (Math.random() * 2 + 2) + 's';
+                document.body.appendChild(c);
+            }
+        }
+
+        function gameWin() {
+            state.phase = 'win';
+            document.getElementById('menu').classList.remove('hidden-force');
+            document.getElementById('menu-title').innerHTML = "AUDIT<br>BESTANDEN";
+            document.getElementById('menu-title').className = "text-5xl font-black mb-2 text-green-600 leading-none";
+            document.getElementById('final-score').innerText = Math.floor(state.score);
+            document.getElementById('hud').classList.add('hidden-force');
+            setInterval(spawnConfetti, 100);
+        }
+
+        function updateParticles() {
+            for(let i=particles.length-1; i>=0; i--) {
+                const p = particles[i];
+                if(p.userData.isFlash) { p.userData.life -= 0.1; p.scale.multiplyScalar(1.2); p.material.opacity = p.userData.life; } 
+                else if (p.userData.isShockwave) { p.userData.life -= 0.05; p.scale.multiplyScalar(1.1); p.material.opacity = p.userData.life; } 
+                else { p.position.add(p.userData.vel); p.userData.life -= 0.05; p.scale.multiplyScalar(0.9); if(p.userData.rot) p.rotation.x += p.userData.rot.x; }
+                if(p.userData.life <= 0) { scene.remove(p); particles.splice(i,1); }
+            }
+        }
+
+        function updateGame() {
+            if(state.score >= 10000) { gameWin(); return; }
+
+            state.frame++;
+            playerGroup.position.x += (state.targetX - playerGroup.position.x) * 0.2;
+            playerGroup.rotation.z = (playerGroup.position.x - state.targetX) * -0.08;
+            playerGroup.rotation.y = (playerGroup.position.x - state.targetX) * -0.04;
+            kartMesh.position.y = Math.sin(state.frame * 0.5) * 0.05;
+            kartMesh.children.forEach(c => { if(c.userData.isSaw) c.rotation.z -= c.userData.speed; });
+            if(state.frame % 2 === 0) createMassiveFire();
+
+            camera.position.lerp(new THREE.Vector3(0, 7, 12), 0.05);
+            if(camera.position.z > 8) camera.lookAt(0, 1, -10);
+
+            if(state.bearActive) {
+                state.bearTimer--;
+                document.getElementById('bear-timer-bar').style.width = (state.bearTimer / state.bearMaxTime * 100) + '%';
+                bearGroup.visible = true;
+                let targetX = playerGroup.position.x; let hunting = false;
+                obstacles.forEach(o => { if (o.userData.type === 'bad' || o.userData.type === 'boss') { const dist = o.position.z - bearGroup.position.z; if (dist > 0 && dist < 50) { targetX = o.position.x; hunting = true; } } });
+                bearGroup.position.z += (playerGroup.position.z - 15 - bearGroup.position.z) * 0.1; bearGroup.position.x += (targetX - bearGroup.position.x) * (hunting ? 0.2 : 0.08);
+                const parts = bearGroup.userData;
+                if(state.bearAction === 'kick') { bearGroup.rotation.y += 0.8; bearGroup.position.y = 2.5; parts.legR.rotation.z = 1.5; parts.legR.position.x = 1.0; } 
+                else { bearGroup.rotation.y = Math.sin(state.frame*0.2) * 0.1; bearGroup.position.y = 1.5 + Math.abs(Math.sin(state.frame*0.4))*0.5; parts.legL.rotation.x = Math.sin(state.frame*0.4); parts.legR.rotation.x = -Math.sin(state.frame*0.4); parts.armL.rotation.x = -Math.sin(state.frame*0.4); parts.armR.rotation.x = Math.sin(state.frame*0.4); parts.legR.rotation.z = 0; parts.legR.position.x = 0.4; }
+                parts.tails.rotation.x = 0.5 + Math.sin(state.frame*0.8)*0.5;
+                if(state.bearTimer <= 0) { state.bearActive = false; bearGroup.visible = false; document.getElementById('bear-alert').classList.add('hidden-force'); }
             }
 
-            for (let i = 0; i < this.items.length; i++) {
-                let p = this.items[i];
-                p.x -= this.dx;
-
-                // Kollisionserkennung
-                // X-Achse
-                if (bird.x + bird.radius > p.x && bird.x - bird.radius < p.x + this.width) {
-                    // Y-Achse (Oben oder Unten getroffen)
-                    if (bird.y - bird.radius < p.top || bird.y + bird.radius > canvas.height - foreground.height - p.bottom) {
-                        gameOver("Kollision mit Emissionsquelle!");
+            const spd = config.speed;
+            for(let i=projectiles.length-1; i>=0; i--) {
+                const p = projectiles[i]; p.position.z -= 2; let hit = false;
+                for(let j=obstacles.length-1; j>=0; j--) {
+                    const o = obstacles[j];
+                    if(p.position.distanceTo(o.position) < 3.5) {
+                        if (o.userData.type === 'bad') { scene.remove(o); obstacles.splice(j, 1); createEnhancedExplosion(o.position.x, 1, o.position.z, 0xff9800, 2); state.score += 50; hit = true; break; } 
+                        else if (o.userData.type === 'boss') { o.userData.hp--; hit = true; o.children[0].material.color.setHex(0xffffff); setTimeout(() => o.children[0].material.color.setHex(0x333333), 100); if (o.userData.hp <= 0) { scene.remove(o); obstacles.splice(j, 1); createEnhancedExplosion(o.position.x, 1, o.position.z, 0xff0000, 5); state.score += 500; } break; }
                     }
                 }
-
-                // Punktzahl erhöhen
-                if (p.x + this.width < bird.x && !p.passed) {
-                    score++;
-                    p.passed = true;
-                    document.getElementById('score').innerText = score;
-                    showFloatingText("+ Energieeffizienz", bird.x, bird.y - 30);
-                    
-                    // Beschleunigung bei höherem Score (ISO KVP - Kontinuierlicher Verbesserungsprozess)
-                    if(score % 5 === 0) {
-                        this.dx += 0.2;
-                        showFloatingText("Prozess beschleunigt!", canvas.width/2, canvas.height/2);
-                    }
-                }
-
-                // Entfernen wenn aus dem Bild
-                if (p.x + this.width < 0) {
-                    this.items.shift();
-                    i--;
-                }
-            }
-        },
-        
-        reset: function() {
-            this.items = [];
-            this.dx = 3;
-        }
-    };
-
-    // Hintergrund (Windräder & Landschaft)
-    const background = {
-        clouds: [],
-        turbines: [],
-        
-        init: function() {
-            // Initiale Wolken und Windräder
-            for(let i=0; i<5; i++) this.clouds.push({x: Math.random() * canvas.width, y: Math.random() * 200, s: Math.random() * 0.5 + 0.5});
-            for(let i=0; i<3; i++) this.turbines.push({x: i * 300 + 100, angle: Math.random() * 360});
-        },
-
-        draw: function() {
-            // Himmel (Verlauf wird per CSS gesetzt, aber wir können Sonne zeichnen)
-            ctx.fillStyle = "rgba(255, 255, 200, 0.3)";
-            ctx.beginPath();
-            ctx.arc(canvas.width - 100, 100, 60, 0, Math.PI*2);
-            ctx.fill();
-
-            // Wolken
-            ctx.fillStyle = "rgba(255, 255, 255, 0.6)";
-            this.clouds.forEach(c => {
-                c.x -= 0.5 * c.s;
-                if(c.x < -100) c.x = canvas.width + 100;
-                ctx.beginPath();
-                ctx.arc(c.x, c.y, 30 * c.s, 0, Math.PI*2);
-                ctx.arc(c.x + 25*c.s, c.y - 10*c.s, 40 * c.s, 0, Math.PI*2);
-                ctx.arc(c.x + 50*c.s, c.y, 30 * c.s, 0, Math.PI*2);
-                ctx.fill();
-            });
-
-            // Windräder im Hintergrund (ISO 50001 Symbolik)
-            ctx.strokeStyle = "rgba(255, 255, 255, 0.8)";
-            ctx.lineWidth = 4;
-            this.turbines.forEach(t => {
-                t.x -= 0.5; // Parallax
-                if(t.x < -100) t.x = canvas.width + 100;
-
-                let baseY = canvas.height - foreground.height - 100;
-                
-                // Mast
-                ctx.beginPath();
-                ctx.moveTo(t.x, baseY + 100);
-                ctx.lineTo(t.x, baseY);
-                ctx.stroke();
-
-                // Rotorblätter
-                t.angle += 2;
-                ctx.save();
-                ctx.translate(t.x, baseY);
-                ctx.rotate(t.angle * Math.PI / 180);
-                for(let i=0; i<3; i++) {
-                    ctx.rotate(120 * Math.PI / 180);
-                    ctx.beginPath();
-                    ctx.moveTo(0,0);
-                    ctx.lineTo(0, -60);
-                    ctx.stroke();
-                }
-                ctx.restore();
-            });
-        }
-    };
-
-    // Vordergrund (Boden)
-    const foreground = {
-        height: 80,
-        x: 0,
-        
-        draw: function() {
-            // Gras / Boden
-            ctx.fillStyle = '#4caf50';
-            ctx.fillRect(0, canvas.height - this.height, canvas.width, this.height);
-            
-            // Muster für Bewegungseffekt
-            ctx.fillStyle = '#388e3c';
-            for (let i = this.x; i < canvas.width; i += 40) {
-                ctx.beginPath();
-                ctx.moveTo(i, canvas.height - this.height);
-                ctx.lineTo(i + 20, canvas.height);
-                ctx.lineTo(i - 10, canvas.height);
-                ctx.fill();
+                if(hit || p.position.z < -150) { scene.remove(p); projectiles.splice(i, 1); }
             }
 
-            // ISO-Bäume (Dekoration im Vordergrund)
-            // Nur einfache Formen um Performance zu halten
-        },
+            for(let i=obstacles.length-1; i>=0; i--) {
+                const o = obstacles[i]; o.position.z += spd;
+                if(state.bearActive && Math.abs(o.position.z - bearGroup.position.z) < 5 && Math.abs(o.position.x - bearGroup.position.x) < 4) {
+                    if(o.userData.type === 'bad') { state.bearAction = 'kick'; setTimeout(() => state.bearAction = 'run', 300); scene.remove(o); obstacles.splice(i, 1); createEnhancedExplosion(o.position.x, 1, o.position.z, 0x00ff00, 3); state.score += 150; continue; }
+                    else if(o.userData.type === 'boss') { state.bearAction = 'kick'; o.userData.hp -= 2; o.children[0].material.color.setHex(0xffffff); setTimeout(() => o.children[0].material.color.setHex(0x222222), 100); if (o.userData.hp <= 0) { scene.remove(o); obstacles.splice(i, 1); createEnhancedExplosion(o.position.x, 1, o.position.z, 0xff0000, 6); state.score += 600; } }
+                }
+                if(Math.abs(o.position.z - playerGroup.position.z) < 2.5 && Math.abs(o.position.x - playerGroup.position.x) < 2.5) {
+                    scene.remove(o); obstacles.splice(i, 1);
+                    if(o.userData.type === 'honey') { state.bearActive = true; state.bearTimer = state.bearMaxTime; state.bearAction = 'run'; document.getElementById('bear-alert').classList.remove('hidden-force'); state.score += 200; } 
+                    else { state.health -= (o.userData.type === 'boss' ? 50 : 25); createEnhancedExplosion(playerGroup.position.x, 1, playerGroup.position.z, 0xff0000, 1.5); document.body.classList.add('shake'); setTimeout(()=>document.body.classList.remove('shake'), 400); }
+                }
+                if(o.position.z > 20) { scene.remove(o); obstacles.splice(i, 1); }
+            }
 
-        update: function() {
-            this.x = (frames * speed) % 40;
-            this.x = -this.x; // Scroll nach links
+            for(let i=envObjects.length-1; i>=0; i--) { const e = envObjects[i]; e.position.z += spd; if(e.position.z > 30) { scene.remove(e); envObjects.splice(i, 1); } }
+            if(state.frame % 5 === 0) spawnEnvironmentRow(-150);
+            if(state.frame % 30 === 0) spawnObstacle();
+            updateParticles();
+            state.score += 0.2;
+            if(state.health <= 0) gameOver();
+            document.getElementById('score').innerText = Math.floor(state.score);
+            document.getElementById('health-bar').style.width = state.health + '%';
         }
-    };
 
-    // --- Spiel Logik ---
-
-    function loop() {
-        if (!gameRunning) return;
-
-        // Logik
-        bird.update();
-        foreground.update();
-        pipes.update();
-        background.draw(); // Erst Hintergrund
-
-        // Zeichnen
-        ctx.clearRect(0, 0, canvas.width, canvas.height); // Alles löschen für sauberes Redraw
-        
-        // Layer neu aufbauen
-        background.draw();
-        pipes.draw();
-        foreground.draw();
-        bird.draw();
-
-        frames++;
-        requestAnimationFrame(loop);
-    }
-
-    function startGame() {
-        document.getElementById('start-screen').classList.add('hidden');
-        document.getElementById('game-over-screen').classList.add('hidden');
-        resetGameVars();
-        gameRunning = true;
-        background.init();
-        loop();
-    }
-
-    function resetGameVars() {
-        bird.y = 150;
-        bird.velocity = 0;
-        bird.particles = [];
-        pipes.reset();
-        score = 0;
-        frames = 0;
-        document.getElementById('score').innerText = score;
-    }
-
-    function resetGame() {
-        startGame();
-    }
-
-    function gameOver(reason) {
-        gameRunning = false;
-        document.getElementById('final-score').innerText = score;
-        document.getElementById('death-reason').innerText = reason;
-        document.getElementById('game-over-screen').classList.remove('hidden');
-    }
-
-    // Hilfsfunktion für schwebenden Text
-    function showFloatingText(text, x, y) {
-        const el = document.createElement('div');
-        el.className = 'floating-text';
-        el.innerText = text;
-        el.style.left = x + 'px';
-        el.style.top = y + 'px';
-        document.getElementById('game-container').appendChild(el);
-        setTimeout(() => el.remove(), 1000);
-    }
-
-    // --- Input Handling ---
-
-    function inputAction(e) {
-        if (e.type === 'keydown' && e.code !== 'Space') return;
-        if (e.type === 'keydown') e.preventDefault(); // Kein Scrollen bei Space
-
-        if (gameRunning) {
-            bird.flap();
-        } else {
-            // Start bei Tastendruck, wenn wir im Startscreen sind, aber der Button ist besser für UX
+        function gameOver() {
+            state.phase = 'gameover';
+            document.getElementById('menu').classList.remove('hidden-force');
+            document.getElementById('menu-title').innerHTML = "MISSION<br>GESCHEITERT";
+            document.getElementById('menu-title').className = "text-5xl font-black mb-2 text-red-600 leading-none";
+            document.getElementById('final-score').innerText = Math.floor(state.score);
+            document.getElementById('hud').classList.add('hidden-force');
         }
-    }
 
-    window.addEventListener('keydown', inputAction);
-    window.addEventListener('mousedown', inputAction);
-    window.addEventListener('touchstart', (e) => {
-        e.preventDefault(); // Verhindert Doppeltap-Zoom etc.
-        inputAction(e);
-    }, {passive: false});
+        function animate() {
+            requestAnimationFrame(animate);
+            if(state.phase === 'title') { camera.position.x = Math.sin(Date.now()*0.0005) * 8; camera.position.z = Math.cos(Date.now()*0.0005) * 8; camera.lookAt(0,1,0); renderer.render(scene, camera); }
+            else if(state.phase === 'intro') updateIntro();
+            else if(state.phase === 'refuel') updateRefuel();
+            else if(state.phase === 'running') updateGame();
+            if(state.phase !== 'title') renderer.render(scene, camera);
+        }
 
-</script>
-
+        window.addEventListener('mousemove', e => state.targetX = ((e.clientX/window.innerWidth)*2-1)*7);
+        window.addEventListener('touchmove', e => state.targetX = ((e.touches[0].clientX/window.innerWidth)*2-1)*7);
+        window.addEventListener('click', () => { if(state.phase==='running') shoot(); });
+        window.addEventListener('keydown', e => { if(e.code==='Space' && state.phase==='running') shoot(); });
+        window.addEventListener('resize', () => { camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); });
+        animate();
+    </script>
 </body>
 </html>

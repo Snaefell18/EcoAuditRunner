@@ -69,6 +69,7 @@
             <h2 class="text-4xl font-black uppercase tracking-widest text-black">MISSION STARTEN</h2>
         </div>
         <p class="text-white mt-4 font-bold bg-black px-2">v5.0 Final Audit</p>
+        <p class="text-gray-400 mt-2 text-sm font-bold opacity-80">&copy; Jan-Niklas Rentzsch</p>
     </div>
 
     <!-- HUD -->
@@ -372,7 +373,7 @@
              scene.add(mesh); obstacles.push(mesh);
         }
 
-        // --- GAME LOGIC ---
+        // --- GAME LOGIC STATES ---
         function startGameSequence() {
             if(state.phase === 'title') { state.phase = 'intro'; state.introAngle = 0; document.getElementById('title-screen').classList.add('hidden-force'); }
         }

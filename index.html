@@ -1,0 +1,565 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>ISO 14001 & 50001: Eco-Audit Runner</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;700;900&display=swap');
+
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: #333;
+            font-family: 'Roboto', sans-serif;
+            touch-action: none; /* Verhindert Zoom/Scroll auf Mobile */
+        }
+
+        #game-container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            background: linear-gradient(to bottom, #4facfe 0%, #00f2fe 100%);
+            overflow: hidden;
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+
+        /* UI Overlay Styles */
+        #ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+        }
+
+        .hud {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            color: white;
+            font-size: 24px;
+            font-weight: bold;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+            pointer-events: none;
+            z-index: 10;
+        }
+        
+        .iso-badge {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: rgba(255, 255, 255, 0.9);
+            padding: 5px 15px;
+            border-radius: 20px;
+            color: #2e7d32;
+            font-weight: bold;
+            font-size: 14px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            display: flex;
+            gap: 10px;
+        }
+
+        #start-screen, #game-over-screen {
+            background: rgba(255, 255, 255, 0.95);
+            padding: 40px;
+            border-radius: 20px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+            pointer-events: auto;
+            max-width: 90%;
+            width: 320px;
+            transition: transform 0.3s ease;
+        }
+
+        h1 {
+            color: #2e7d32;
+            margin: 0 0 10px 0;
+            font-size: 32px;
+            text-transform: uppercase;
+        }
+
+        h2 {
+            color: #555;
+            font-size: 18px;
+            margin: 0 0 20px 0;
+        }
+
+        p {
+            color: #666;
+            margin-bottom: 25px;
+            line-height: 1.5;
+        }
+
+        button {
+            background: linear-gradient(45deg, #43a047, #66bb6a);
+            border: none;
+            padding: 15px 40px;
+            color: white;
+            font-size: 18px;
+            font-weight: bold;
+            border-radius: 50px;
+            cursor: pointer;
+            box-shadow: 0 4px 15px rgba(67, 160, 71, 0.4);
+            transition: transform 0.1s, box-shadow 0.1s;
+        }
+
+        button:active {
+            transform: scale(0.95);
+            box-shadow: 0 2px 10px rgba(67, 160, 71, 0.3);
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        /* Schwebende Texteffekte */
+        .floating-text {
+            position: absolute;
+            color: #fff;
+            font-weight: bold;
+            pointer-events: none;
+            animation: floatUp 1s ease-out forwards;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
+        }
+
+        @keyframes floatUp {
+            0% { transform: translateY(0); opacity: 1; }
+            100% { transform: translateY(-50px); opacity: 0; }
+        }
+
+    </style>
+</head>
+<body>
+
+<div id="game-container">
+    <canvas id="gameCanvas"></canvas>
+    
+    <div class="hud">
+        KPI Score: <span id="score">0</span>
+    </div>
+
+    <div class="iso-badge">
+        <span>ISO 14001</span> | <span>ISO 50001</span>
+    </div>
+
+    <div id="ui-layer">
+        <!-- Start Screen -->
+        <div id="start-screen">
+            <h1>Eco-Audit</h1>
+            <h2>Mission: Nachhaltigkeit</h2>
+            <p>Navigiere die Eco-Drone durch die industrielle Verschwendung.<br><br>
+               Vermeide hohe Emissionen (Schornsteine) und spare Energie!</p>
+            <button onclick="startGame()">Audit Starten</button>
+        </div>
+
+        <!-- Game Over Screen -->
+        <div id="game-over-screen" class="hidden">
+            <h1 style="color: #c62828;">Audit Failed!</h1>
+            <h2>Nichtkonformität festgestellt</h2>
+            <p id="death-reason">Zu viel CO2 ausgestoßen.</p>
+            <p>Erreichter KPI Score: <b id="final-score">0</b></p>
+            <button onclick="resetGame()">Re-Zertifizierung</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    // --- Konfiguration & Setup ---
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    
+    let gameRunning = false;
+    let frames = 0;
+    let score = 0;
+    let speed = 2.5; // Scrollgeschwindigkeit
+
+    // Responsive Canvas
+    function resizeCanvas() {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+    }
+    window.addEventListener('resize', resizeCanvas);
+    resizeCanvas();
+
+    // --- Spiel-Klassen ---
+
+    // Partikel-Effekt für den Antrieb
+    class Particle {
+        constructor(x, y) {
+            this.x = x;
+            this.y = y;
+            this.size = Math.random() * 5 + 2;
+            this.speedX = Math.random() * -2 - 1;
+            this.speedY = Math.random() * 2 - 1;
+            this.color = `hsl(${120 + Math.random() * 40}, 100%, 50%)`; // Grüntöne
+            this.life = 1.0;
+        }
+        update() {
+            this.x += this.speedX;
+            this.y += this.speedY;
+            this.life -= 0.05;
+        }
+        draw() {
+            ctx.fillStyle = this.color;
+            ctx.globalAlpha = Math.max(0, this.life);
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.globalAlpha = 1.0;
+        }
+    }
+
+    // Die Eco-Drone (Spieler)
+    const bird = {
+        x: 50,
+        y: 150,
+        radius: 15,
+        velocity: 0,
+        gravity: 0.25,
+        jump: -5.5, // Sprungkraft
+        particles: [],
+
+        draw: function() {
+            // Partikel aktualisieren und zeichnen
+            if (frames % 2 === 0) {
+                this.particles.push(new Particle(this.x - 10, this.y));
+            }
+            for (let i = 0; i < this.particles.length; i++) {
+                this.particles[i].update();
+                this.particles[i].draw();
+                if (this.particles[i].life <= 0) {
+                    this.particles.splice(i, 1);
+                    i--;
+                }
+            }
+
+            // Zeichne Drone (Glühender Ball)
+            ctx.shadowBlur = 20;
+            ctx.shadowColor = "#00ff00"; // Energie-Glow
+            ctx.fillStyle = '#fff';
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Innerer grüner Kern
+            ctx.fillStyle = '#76ff03';
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.radius * 0.6, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Recycling Symbol (Simuliert)
+            ctx.strokeStyle = '#2e7d32';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.radius * 0.4, 0, Math.PI * 1.5);
+            ctx.stroke();
+
+            ctx.shadowBlur = 0; // Reset Glow
+        },
+
+        update: function() {
+            this.velocity += this.gravity;
+            this.y += this.velocity;
+
+            // Bodenkollision
+            if (this.y + this.radius >= canvas.height - foreground.height) {
+                gameOver("Bodenkontamination verursacht!");
+            }
+            // Deckenkollision
+            if (this.y - this.radius <= 0) {
+                this.velocity = 0;
+                this.y = this.radius;
+            }
+        },
+
+        flap: function() {
+            this.velocity = this.jump;
+        }
+    };
+
+    // Hindernisse (Schornsteine)
+    const pipes = {
+        items: [],
+        width: 60,
+        gap: 160, // Platz zwischen oben und unten
+        dx: 3, // Bewegungsgeschwindigkeit
+
+        draw: function() {
+            for (let i = 0; i < this.items.length; i++) {
+                let p = this.items[i];
+                
+                // Verlauf für metallischen Look
+                let gradient = ctx.createLinearGradient(p.x, 0, p.x + this.width, 0);
+                gradient.addColorStop(0, '#555');
+                gradient.addColorStop(0.5, '#999');
+                gradient.addColorStop(1, '#444');
+
+                ctx.fillStyle = gradient;
+                
+                // Oberer Schornstein
+                ctx.fillRect(p.x, 0, this.width, p.top);
+                // Unterer Schornstein
+                ctx.fillRect(p.x, canvas.height - foreground.height - p.bottom, this.width, p.bottom);
+                
+                // Details (Ränder)
+                ctx.fillStyle = '#222';
+                ctx.fillRect(p.x - 5, p.top - 20, this.width + 10, 20); // Top Cap
+                ctx.fillRect(p.x - 5, canvas.height - foreground.height - p.bottom, this.width + 10, 20); // Bottom Cap
+                
+                // Warnstreifen (ISO Sicherheit)
+                ctx.fillStyle = '#fdd835'; // Gelb
+                ctx.fillRect(p.x, p.top - 15, this.width, 5);
+                ctx.fillRect(p.x, canvas.height - foreground.height - p.bottom + 10, this.width, 5);
+            }
+        },
+
+        update: function() {
+            // Neue Rohre hinzufügen
+            if (frames % 120 === 0) {
+                // Berechne zufällige Höhe
+                let maxY = canvas.height - foreground.height - this.gap - 50;
+                let topHeight = Math.floor(Math.random() * (maxY - 50)) + 50;
+                let bottomHeight = canvas.height - foreground.height - this.gap - topHeight;
+                
+                this.items.push({
+                    x: canvas.width,
+                    top: topHeight,
+                    bottom: bottomHeight,
+                    passed: false
+                });
+            }
+
+            for (let i = 0; i < this.items.length; i++) {
+                let p = this.items[i];
+                p.x -= this.dx;
+
+                // Kollisionserkennung
+                // X-Achse
+                if (bird.x + bird.radius > p.x && bird.x - bird.radius < p.x + this.width) {
+                    // Y-Achse (Oben oder Unten getroffen)
+                    if (bird.y - bird.radius < p.top || bird.y + bird.radius > canvas.height - foreground.height - p.bottom) {
+                        gameOver("Kollision mit Emissionsquelle!");
+                    }
+                }
+
+                // Punktzahl erhöhen
+                if (p.x + this.width < bird.x && !p.passed) {
+                    score++;
+                    p.passed = true;
+                    document.getElementById('score').innerText = score;
+                    showFloatingText("+ Energieeffizienz", bird.x, bird.y - 30);
+                    
+                    // Beschleunigung bei höherem Score (ISO KVP - Kontinuierlicher Verbesserungsprozess)
+                    if(score % 5 === 0) {
+                        this.dx += 0.2;
+                        showFloatingText("Prozess beschleunigt!", canvas.width/2, canvas.height/2);
+                    }
+                }
+
+                // Entfernen wenn aus dem Bild
+                if (p.x + this.width < 0) {
+                    this.items.shift();
+                    i--;
+                }
+            }
+        },
+        
+        reset: function() {
+            this.items = [];
+            this.dx = 3;
+        }
+    };
+
+    // Hintergrund (Windräder & Landschaft)
+    const background = {
+        clouds: [],
+        turbines: [],
+        
+        init: function() {
+            // Initiale Wolken und Windräder
+            for(let i=0; i<5; i++) this.clouds.push({x: Math.random() * canvas.width, y: Math.random() * 200, s: Math.random() * 0.5 + 0.5});
+            for(let i=0; i<3; i++) this.turbines.push({x: i * 300 + 100, angle: Math.random() * 360});
+        },
+
+        draw: function() {
+            // Himmel (Verlauf wird per CSS gesetzt, aber wir können Sonne zeichnen)
+            ctx.fillStyle = "rgba(255, 255, 200, 0.3)";
+            ctx.beginPath();
+            ctx.arc(canvas.width - 100, 100, 60, 0, Math.PI*2);
+            ctx.fill();
+
+            // Wolken
+            ctx.fillStyle = "rgba(255, 255, 255, 0.6)";
+            this.clouds.forEach(c => {
+                c.x -= 0.5 * c.s;
+                if(c.x < -100) c.x = canvas.width + 100;
+                ctx.beginPath();
+                ctx.arc(c.x, c.y, 30 * c.s, 0, Math.PI*2);
+                ctx.arc(c.x + 25*c.s, c.y - 10*c.s, 40 * c.s, 0, Math.PI*2);
+                ctx.arc(c.x + 50*c.s, c.y, 30 * c.s, 0, Math.PI*2);
+                ctx.fill();
+            });
+
+            // Windräder im Hintergrund (ISO 50001 Symbolik)
+            ctx.strokeStyle = "rgba(255, 255, 255, 0.8)";
+            ctx.lineWidth = 4;
+            this.turbines.forEach(t => {
+                t.x -= 0.5; // Parallax
+                if(t.x < -100) t.x = canvas.width + 100;
+
+                let baseY = canvas.height - foreground.height - 100;
+                
+                // Mast
+                ctx.beginPath();
+                ctx.moveTo(t.x, baseY + 100);
+                ctx.lineTo(t.x, baseY);
+                ctx.stroke();
+
+                // Rotorblätter
+                t.angle += 2;
+                ctx.save();
+                ctx.translate(t.x, baseY);
+                ctx.rotate(t.angle * Math.PI / 180);
+                for(let i=0; i<3; i++) {
+                    ctx.rotate(120 * Math.PI / 180);
+                    ctx.beginPath();
+                    ctx.moveTo(0,0);
+                    ctx.lineTo(0, -60);
+                    ctx.stroke();
+                }
+                ctx.restore();
+            });
+        }
+    };
+
+    // Vordergrund (Boden)
+    const foreground = {
+        height: 80,
+        x: 0,
+        
+        draw: function() {
+            // Gras / Boden
+            ctx.fillStyle = '#4caf50';
+            ctx.fillRect(0, canvas.height - this.height, canvas.width, this.height);
+            
+            // Muster für Bewegungseffekt
+            ctx.fillStyle = '#388e3c';
+            for (let i = this.x; i < canvas.width; i += 40) {
+                ctx.beginPath();
+                ctx.moveTo(i, canvas.height - this.height);
+                ctx.lineTo(i + 20, canvas.height);
+                ctx.lineTo(i - 10, canvas.height);
+                ctx.fill();
+            }
+
+            // ISO-Bäume (Dekoration im Vordergrund)
+            // Nur einfache Formen um Performance zu halten
+        },
+
+        update: function() {
+            this.x = (frames * speed) % 40;
+            this.x = -this.x; // Scroll nach links
+        }
+    };
+
+    // --- Spiel Logik ---
+
+    function loop() {
+        if (!gameRunning) return;
+
+        // Logik
+        bird.update();
+        foreground.update();
+        pipes.update();
+        background.draw(); // Erst Hintergrund
+
+        // Zeichnen
+        ctx.clearRect(0, 0, canvas.width, canvas.height); // Alles löschen für sauberes Redraw
+        
+        // Layer neu aufbauen
+        background.draw();
+        pipes.draw();
+        foreground.draw();
+        bird.draw();
+
+        frames++;
+        requestAnimationFrame(loop);
+    }
+
+    function startGame() {
+        document.getElementById('start-screen').classList.add('hidden');
+        document.getElementById('game-over-screen').classList.add('hidden');
+        resetGameVars();
+        gameRunning = true;
+        background.init();
+        loop();
+    }
+
+    function resetGameVars() {
+        bird.y = 150;
+        bird.velocity = 0;
+        bird.particles = [];
+        pipes.reset();
+        score = 0;
+        frames = 0;
+        document.getElementById('score').innerText = score;
+    }
+
+    function resetGame() {
+        startGame();
+    }
+
+    function gameOver(reason) {
+        gameRunning = false;
+        document.getElementById('final-score').innerText = score;
+        document.getElementById('death-reason').innerText = reason;
+        document.getElementById('game-over-screen').classList.remove('hidden');
+    }
+
+    // Hilfsfunktion für schwebenden Text
+    function showFloatingText(text, x, y) {
+        const el = document.createElement('div');
+        el.className = 'floating-text';
+        el.innerText = text;
+        el.style.left = x + 'px';
+        el.style.top = y + 'px';
+        document.getElementById('game-container').appendChild(el);
+        setTimeout(() => el.remove(), 1000);
+    }
+
+    // --- Input Handling ---
+
+    function inputAction(e) {
+        if (e.type === 'keydown' && e.code !== 'Space') return;
+        if (e.type === 'keydown') e.preventDefault(); // Kein Scrollen bei Space
+
+        if (gameRunning) {
+            bird.flap();
+        } else {
+            // Start bei Tastendruck, wenn wir im Startscreen sind, aber der Button ist besser für UX
+        }
+    }
+
+    window.addEventListener('keydown', inputAction);
+    window.addEventListener('mousedown', inputAction);
+    window.addEventListener('touchstart', (e) => {
+        e.preventDefault(); // Verhindert Doppeltap-Zoom etc.
+        inputAction(e);
+    }, {passive: false});
+
+</script>
+
+</body>
+</html>
